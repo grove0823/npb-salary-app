@@ -1,35 +1,35 @@
 import streamlit as st
 import pandas as pd
 
-# Windows‚Å•Û‘¶‚³‚ê‚½“ú–{ŒêCSVƒtƒ@ƒCƒ‹‚Í cp932 ‚Å“Ç‚Ş
-batters = pd.read_csv("batters_with_theory.csv", encoding="cp932")
-pitchers = pd.read_csv("pitchers_with_theory.csv", encoding="cp932")
+# Windowsã§ä¿å­˜ã•ã‚ŒãŸæ—¥æœ¬èªCSVãƒ•ã‚¡ã‚¤ãƒ«ã¯ cp932 ã§èª­ã‚€
+batters = pd.read_csv("batters_with_salary.csv", encoding="cp932")
+pitchers = pd.read_csv("pitchers_with_salary.csv", encoding="cp932")
 
-player_type = st.selectbox("ƒ|ƒWƒVƒ‡ƒ“‚ğ‘I‘ğ", ["–ìè", "“Šè"])
-df = batters if player_type == "–ìè" else pitchers
+player_type = st.selectbox("ãƒã‚¸ã‚·ãƒ§ãƒ³ã‚’é¸æŠ", ["é‡æ‰‹", "æŠ•æ‰‹"])
+df = batters if player_type == "é‡æ‰‹" else pitchers
 
 teams = sorted(df["team"].dropna().unique())
-team = st.selectbox("ƒ`[ƒ€‚ğ‘I‘ğ", teams)
+team = st.selectbox("ãƒãƒ¼ãƒ ã‚’é¸æŠ", teams)
 
 filtered = df[df["team"] == team]
-players = filtered["‘Iè–¼"].dropna().unique()
-player = st.selectbox("‘Iè‚ğ‘I‘ğ", players)
+players = filtered["é¸æ‰‹å"].dropna().unique()
+player = st.selectbox("é¸æ‰‹ã‚’é¸æŠ", players)
 
-data = filtered[filtered["‘Iè–¼"] == player].iloc[0]
+data = filtered[filtered["é¸æ‰‹å"] == player].iloc[0]
 
-st.title(f"{player}i{team} / {player_type}j")
-st.markdown(f"- ?? **À”N•î**F{int(data['salary']):,}–œ‰~")
-st.markdown(f"- ?? **—˜_”N•î**F{int(data['theoretical_salary']):,}–œ‰~")
+st.title(f"{player}ï¼ˆ{team} / {player_type}ï¼‰")
+st.markdown(f"- ?? **å®Ÿå¹´ä¿¸**ï¼š{int(data['salary']):,}ä¸‡å††")
+st.markdown(f"- ?? **ç†è«–å¹´ä¿¸**ï¼š{int(data['theoretical_salary']):,}ä¸‡å††")
 
-if player_type == "–ìè":
-    st.subheader("‘ÅŒ‚¬Ñ")
-    st.markdown(f"- ‘Å”F{data['‘Å”']}")
-    st.markdown(f"- ˆÀ‘ÅF{data['ˆÀ‘Å']}")
-    st.markdown(f"- –{—Û‘ÅF{data['–{—Û‘Å']}")
-    st.markdown(f"- OPSF{data['OPS']}")
+if player_type == "é‡æ‰‹":
+    st.subheader("æ‰“æ’ƒæˆç¸¾")
+    st.markdown(f"- æ‰“æ•°ï¼š{data['æ‰“æ•°']}")
+    st.markdown(f"- å®‰æ‰“ï¼š{data['å®‰æ‰“']}")
+    st.markdown(f"- æœ¬å¡æ‰“ï¼š{data['æœ¬å¡æ‰“']}")
+    st.markdown(f"- OPSï¼š{data['OPS']}")
 else:
-    st.subheader("“Šè¬Ñ")
-    st.markdown(f"- “Š‹…‰ñF{data['“Š‹…‰ñ']}")
-    st.markdown(f"- ’DOUF{data['’DOU']}")
-    st.markdown(f"- –hŒä—¦F{data['–hŒä—¦']}")
-    st.markdown(f"- WHIPF{data['WHIP']}")
+    st.subheader("æŠ•æ‰‹æˆç¸¾")
+    st.markdown(f"- æŠ•çƒå›ï¼š{data['æŠ•çƒå›']}")
+    st.markdown(f"- å¥ªä¸‰æŒ¯ï¼š{data['å¥ªä¸‰æŒ¯']}")
+    st.markdown(f"- é˜²å¾¡ç‡ï¼š{data['é˜²å¾¡ç‡']}")
+    st.markdown(f"- WHIPï¼š{data['WHIP']}")
