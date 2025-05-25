@@ -1,333 +1,104 @@
 import streamlit as st
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_regression
+from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.cluster import KMeans
 import numpy as np
 
-# CSVファイルを読み込み
-batters = pd.read_csv("batters_with_salary.csv", encoding="utf-8")
-pitchers = pd.read_csv("pitchers_with_salary.csv", encoding="utf-8")
+# 年度スイッチ
+selected_year = st.sidebar.selectbox("年度を選択", [2024])  # 拡張時に2023など追加可
 
-# 2024年のデータのみにフィルタリング
-if '年度' in batters.columns:
-    batters = batters[batters['年度'] == 2024]
-elif 'year' in batters.columns:
-    batters = batters[batters['year'] == 2024]
-elif '年' in batters.columns:
-    batters = batters[batters['年'] == 2024]
+# CSV読み込み
+batter_file = f"batters_with_salary_{selected_year}.csv"
+pitcher_file = f"pitchers_with_salary_{selected_year}.csv"
 
-if '年度' in pitchers.columns:
-    pitchers = pitchers[pitchers['年度'] == 2024]
-elif 'year' in pitchers.columns:
-    pitchers = pitchers[pitchers['year'] == 2024]
-elif '年' in pitchers.columns:
-    pitchers = pitchers[pitchers['年'] == 2024]
+batters = pd.read_csv(batter_file, encoding="utf-8")
+pitchers = pd.read_csv(pitcher_file, encoding="utf-8")
 
-# 回帰分析による理論年俸計算関数
-def calculate_theoretical_salary(df, is_batter=True):
-    """セイバーメトリクスを含む成績データから理論年俸を計算"""
-    # 欠損値を除去
-    df_clean = df.dropna()
-    
-    if len(df_clean) < 10:  # データが少なすぎる場合
-        return None
-    
-    try:
-        if is_batter:
-            # 野手の場合の特徴量（セイバーメトリクス重視）
-            features = []
-            feature_names = []
-            
-            # 基本的な打撃成績
-            basic_stats = ['打数', '安打', '本塁打', '打点', '得点', '盗塁']
-            for stat in basic_stats:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-            
-            # 打撃率系指標
-            rate_stats = ['打率', '出塁率', '長打率']
-            for stat in rate_stats:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-            
-            # セイバーメトリクス指標（重要度高）
-            sabermetrics = ['OPS', 'OPS+', 'wOBA', 'wRC+', 'WAR', 'UZR', 'DRS', 'BABIP', 'ISO', 'BB%', 'K%']
-            for stat in sabermetrics:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-            
-            # 追加のセイバーメトリクス
-            advanced_stats = ['wRAA', 'wRSB', 'Clutch', 'RE24', 'REW', 'Off', 'Def', 'BsR']
-            for stat in advanced_stats:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-                
-        else:
-            # 投手の場合の特徴量（セイバーメトリクス重視）
-            features = []
-            feature_names = []
-            
-            # 基本的な投手成績
-            basic_stats = ['投球回', '奪三振', '与四球', '勝利', '敗北', 'セーブ', 'ホールド']
-            for stat in basic_stats:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-            
-            # 投手率系指標（低い方が良い指標は逆数化）
-            if '防御率' in df_clean.columns:
-                era_values = df_clean['防御率'].values
-                era_values = np.where(era_values > 0, 1/era_values, 0)
-                features.append(era_values)
-                feature_names.append('防御率(逆数)')
-                
-            if 'WHIP' in df_clean.columns:
-                whip_values = df_clean['WHIP'].values
-                whip_values = np.where(whip_values > 0, 1/whip_values, 0)
-                features.append(whip_values)
-                feature_names.append('WHIP(逆数)')
-            
-            # セイバーメトリクス指標（重要度高）
-            sabermetrics = ['WAR', 'FIP', 'xFIP', 'SIERA', 'tERA', 'ERA+', 'FIP-', 'K%', 'BB%', 'K-BB%', 'BABIP', 'LOB%', 'HR/FB']
-            for stat in sabermetrics:
-                if stat in df_clean.columns:
-                    if stat in ['FIP', 'xFIP', 'SIERA', 'tERA']:  # 低い方が良い指標
-                        values = df_clean[stat].values
-                        values = np.where(values > 0, 1/values, 0)
-                        features.append(values)
-                        feature_names.append(f'{stat}(逆数)')
-                    else:
-                        features.append(df_clean[stat].values)
-                        feature_names.append(stat)
-            
-            # 追加のセイバーメトリクス
-            advanced_stats = ['WPA', 'pLI', 'inLI', 'gmLI', 'exLI', 'Clutch', 'FB%', 'GB%', 'LD%', 'IFFB%', 'Soft%', 'Med%', 'Hard%']
-            for stat in advanced_stats:
-                if stat in df_clean.columns:
-                    features.append(df_clean[stat].values)
-                    feature_names.append(stat)
-        # 特徴量の重要度設定（セイバーメトリクス重視）
-        if len(features) == 0:
-            return None
-            
-        # 特徴量行列を作成
-        X = np.column_stack(features)
-        
-        # 年俸データを取得
-        salary_col = None
-        for col in ['salary', '年俸', '実年俸']:
-            if col in df_clean.columns:
-                salary_col = col
-                break
-        
-        if salary_col is None:
-            return None
-            
-        y = df_clean[salary_col].values
-        
-        # 標準化（セイバーメトリクスは異なるスケールのため重要）
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-        
-        # 特徴量選択（重要度の低い特徴量を除去）
-        from sklearn.feature_selection import SelectKBest, f_regression
-        
-        # 利用可能な特徴量数に応じてk値を調整
-        k_features = min(10, len(features))  # 最大10個の特徴量を選択
-        selector = SelectKBest(score_func=f_regression, k=k_features)
-        X_selected = selector.fit_transform(X_scaled, y)
-        
-        # 選択された特徴量の名前を取得
-        selected_features = [feature_names[i] for i in selector.get_support(indices=True)]
-        
-        # リッジ回帰を使用（過学習を防ぐため）
-        from sklearn.linear_model import Ridge
-        model = Ridge(alpha=1.0)
-        model.fit(X_selected, y)
-        
-        # 理論年俸を予測
-        y_pred = model.predict(X_selected)
-        
-        # 元のデータフレームに理論年俸を追加
-        df_result = df_clean.copy()
-        df_result['理論年俸'] = y_pred
-        
-        return df_result, model, scaler, selected_features, selector
-        
-    except Exception as e:
-        st.error(f"回帰分析でエラーが発生しました: {e}")
-        return None
+# 年度でフィルタ
+batters = batters[batters['年度'] == selected_year] if '年度' in batters.columns else batters
+pitchers = pitchers[pitchers['年度'] == selected_year] if '年度' in pitchers.columns else pitchers
 
-# 理論年俸を計算
-st.sidebar.info("📊 2024年成績から理論年俸を計算中...")
+# ポジション別補正係数（例：DHは打撃重視、捕手は守備含む）
+position_weights = {
+    "DH": 1.2,
+    "捕手": 1.1,
+    "外野手": 1.0,
+    "内野手": 1.0,
+    "投手": 1.0
+}
 
-batter_result = calculate_theoretical_salary(batters, is_batter=True)
-pitcher_result = calculate_theoretical_salary(pitchers, is_batter=False)
+# 類似選手クラスタリング
+def apply_clustering(df, features, n_clusters=5):
+    df_clean = df.dropna(subset=features)
+    if len(df_clean) < n_clusters:
+        return df
+    X = df_clean[features].values
+    X_scaled = StandardScaler().fit_transform(X)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init='auto')
+    df.loc[df_clean.index, "cluster"] = kmeans.fit_predict(X_scaled)
+    return df
 
-if batter_result:
-    batters_with_theoretical = batter_result[0]
-    st.sidebar.success(f"✅ 野手の理論年俸計算完了 ({len(batters_with_theoretical)}名)")
-else:
-    batters_with_theoretical = batters
-    st.sidebar.warning("⚠️ 野手の理論年俸計算に失敗")
+# 特徴量例（適宜修正）
+batter_features = ['打率', '本塁打', 'OPS']
+pitcher_features = ['防御率', '奪三振', 'WHIP']
 
-if pitcher_result:
-    pitchers_with_theoretical = pitcher_result[0]
-    st.sidebar.success(f"✅ 投手の理論年俸計算完了 ({len(pitchers_with_theoretical)}名)")
-else:
-    pitchers_with_theoretical = pitchers
-    st.sidebar.warning("⚠️ 投手の理論年俸計算に失敗")
+batters = apply_clustering(batters, batter_features)
+pitchers = apply_clustering(pitchers, pitcher_features)
 
-# メインアプリ
-st.title("⚾ NPB選手年俸検索アプリ (2024年シーズン)")
+# 理論年俸補正処理
+def apply_theoretical_adjustment(df, pos_col="position"):
+    if "理論年俸" in df.columns and pos_col in df.columns:
+        df["補正理論年俸"] = df.apply(
+            lambda row: row["理論年俸"] * position_weights.get(str(row[pos_col]), 1.0), axis=1
+        )
+    return df
 
-# データ件数表示
-col1, col2 = st.columns(2)
-with col1:
-    st.info(f"📊 野手データ: {len(batters_with_theoretical)}名")
-with col2:
-    st.info(f"🥎 投手データ: {len(pitchers_with_theoretical)}名")
+batters = apply_theoretical_adjustment(batters, pos_col="守備") if "守備" in batters.columns else batters
+pitchers = apply_theoretical_adjustment(pitchers, pos_col="守備") if "守備" in pitchers.columns else pitchers
 
-# ポジション選択
+# 類似選手表示用関数
+def show_similar_players(df, selected_player_name):
+    if "cluster" not in df.columns or "選手名" not in df.columns:
+        st.write("クラスタ情報が不足しています")
+        return
+    if selected_player_name not in df["選手名"].values:
+        st.write("選手が見つかりません")
+        return
+    cluster_id = df[df["選手名"] == selected_player_name]["cluster"].values[0]
+    st.subheader("🔍 類似選手")
+    similar_players = df[df["cluster"] == cluster_id]["選手名"].tolist()
+    for name in similar_players:
+        if name != selected_player_name:
+            st.write(f"- {name}")
+
+# Streamlit UI 部分
+st.title("NPB 理論年俸アプリ")
 player_type = st.selectbox("ポジションを選択", ["野手", "投手"])
+df = batters if player_type == "野手" else pitchers
 
-# データフレームの選択
-if player_type == "野手":
-    df = batters_with_theoretical
-else:
-    df = pitchers_with_theoretical
-
-# チーム選択
 teams = sorted(df["team"].dropna().unique())
 team = st.selectbox("チームを選択", teams)
-
-# 選択されたチームでフィルタリング
 filtered = df[df["team"] == team]
 
-# 選手選択
 players = filtered["選手名"].dropna().unique()
 player = st.selectbox("選手を選択", players)
 
-# 選手データを取得
-data = filtered[filtered["選手名"] == player].iloc[0]
+if player in filtered["選手名"].values:
+    data = filtered[filtered["選手名"] == player].iloc[0]
+    st.header(f"{player}（{team} / {player_type}）")
 
-# 選手情報表示
-st.header(f"{player}（{team} / {player_type}）")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if "年俸" in data:
+            st.metric("実年俸", f"{int(data['年俸']):,}万円")
+    with col2:
+        if "理論年俸" in data:
+            st.metric("理論年俸", f"{int(data['理論年俸']):,}万円")
+    with col3:
+        if "補正理論年俸" in data:
+            st.metric("補正理論年俸", f"{int(data['補正理論年俸']):,}万円")
 
-# 年俸情報
-col1, col2 = st.columns(2)
-
-with col1:
-    # 実年俸
-    salary_col = None
-    for col in ['salary', '年俸', '実年俸']:
-        if col in data.index:
-            salary_col = col
-            break
-    
-    if salary_col:
-        actual_salary = int(data[salary_col])
-        st.metric("💰 実年俸", f"{actual_salary:,}万円")
-    else:
-        st.error("実年俸データが見つかりません")
-
-with col2:
-    # 理論年俸
-    if '理論年俸' in data.index:
-        theoretical_salary = int(data['理論年俸'])
-        st.metric("📊 理論年俸", f"{theoretical_salary:,}万円")
-        
-        # 差額を計算
-        if salary_col:
-            difference = actual_salary - theoretical_salary
-            if difference > 0:
-                st.success(f"💹 実年俸が理論年俸より {difference:,}万円 高い")
-            elif difference < 0:
-                st.info(f"📉 実年俸が理論年俸より {abs(difference):,}万円 低い")
-            else:
-                st.info("⚖️ 実年俸と理論年俸が同じ")
-    else:
-        st.warning("理論年俸を計算できませんでした")
-
-# 成績表示
-if player_type == "野手":
-    st.subheader("⚾ 打撃成績")
-    cols = st.columns(4)
-    
-    stats = ['打数', '安打', '本塁打', 'OPS', '打率', '打点']
-    for i, stat in enumerate(stats):
-        if stat in data.index:
-            with cols[i % 4]:
-                st.metric(stat, data[stat])
-else:
-    st.subheader("🥎 投手成績")
-    cols = st.columns(4)
-    
-    stats = ['投球回', '奪三振', '防御率', 'WHIP', '勝利', '敗北']
-    for i, stat in enumerate(stats):
-        if stat in data.index:
-            with cols[i % 4]:
-                st.metric(stat, data[stat])
-
-# 回帰分析の詳細情報
-with st.expander("📈 セイバーメトリクス回帰分析の詳細"):
-    if player_type == "野手" and batter_result:
-        _, model, scaler, selected_features, selector = batter_result
-        st.write("**野手の理論年俸計算に使用したセイバーメトリクス特徴量:**")
-        st.write("*（特徴量選択により重要度の高い指標のみ使用）*")
-        for i, feature in enumerate(selected_features):
-            importance = abs(model.coef_[i])
-            st.write(f"- **{feature}**: 係数 = {model.coef_[i]:.4f} (重要度: {importance:.4f})")
-        st.write(f"- **切片**: {model.intercept_:.2f}")
-        
-        # モデル評価
-        from sklearn.metrics import r2_score, mean_absolute_error
-        y_true = batters_with_theoretical[[col for col in ['salary', '年俸', '実年俸'] if col in batters_with_theoretical.columns][0]].values
-        y_pred = batters_with_theoretical['理論年俸'].values
-        r2 = r2_score(y_true, y_pred)
-        mae = mean_absolute_error(y_true, y_pred)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("決定係数 (R²)", f"{r2:.3f}")
-        with col2:
-            st.metric("平均絶対誤差", f"{mae:.0f}万円")
-        with col3:
-            st.metric("使用特徴量数", len(selected_features))
-    
-    elif player_type == "投手" and pitcher_result:
-        _, model, scaler, selected_features, selector = pitcher_result
-        st.write("**投手の理論年俸計算に使用したセイバーメトリクス特徴量:**")
-        st.write("*（特徴量選択により重要度の高い指標のみ使用）*")
-        for i, feature in enumerate(selected_features):
-            importance = abs(model.coef_[i])
-            st.write(f"- **{feature}**: 係数 = {model.coef_[i]:.4f} (重要度: {importance:.4f})")
-        st.write(f"- **切片**: {model.intercept_:.2f}")
-        
-        # モデル評価
-        from sklearn.metrics import r2_score, mean_absolute_error
-        y_true = pitchers_with_theoretical[[col for col in ['salary', '年俸', '実年俸'] if col in pitchers_with_theoretical.columns][0]].values
-        y_pred = pitchers_with_theoretical['理論年俸'].values
-        r2 = r2_score(y_true, y_pred)
-        mae = mean_absolute_error(y_true, y_pred)
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("決定係数 (R²)", f"{r2:.3f}")
-        with col2:
-            st.metric("平均絶対誤差", f"{mae:.0f}万円")
-        with col3:
-            st.metric("使用特徴量数", len(selected_features))
-    
-    st.info("💡 **セイバーメトリクス活用のポイント**: WAR、OPS+、wRC+、FIP、xFIPなどの高度な指標を重視し、特徴量選択により最も年俸に影響する指標のみを使用しています。")
-
-# デバッグ情報（開発時のみ）
-with st.expander("🔧 デバッグ情報"):
-    st.write("**利用可能な列名:**")
-    st.write(list(data.index))
-    st.write("**データサンプル:**")
-    st.write(df.head())
+    show_similar_players(df, player)
