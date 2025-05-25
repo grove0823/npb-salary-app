@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 
 # エンコーディングを指定して読み込み（← ここが重要）
-batters = pd.read_csv("batters_with_theory.csv", encoding="shift_jis")
-pitchers = pd.read_csv("pitchers_with_theory.csv", encoding="shift_jis")
+batters = pd.read_csv("batters_with_theory.csv", encoding="cp932")
+pitchers = pd.read_csv("pitchers_with_theory.csv", encoding="cp932")
 
 player_type = st.selectbox("ポジションを選択", ["野手", "投手"])
 df = batters if player_type == "野手" else pitchers
