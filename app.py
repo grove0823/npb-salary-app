@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 
 # Windowsで保存された日本語CSVファイルは cp932 で読む
-batters = pd.read_csv("batters_with_salary.csv", encoding="cp932")
-pitchers = pd.read_csv("pitchers_with_salary.csv", encoding="cp932")
+batters = pd.read_csv("batters_with_salary.csv", encoding="utf-8")
+pitchers = pd.read_csv("pitchers_with_salary.csv", encoding="utf-8")
 
 player_type = st.selectbox("ポジションを選択", ["野手", "投手"])
 df = batters if player_type == "野手" else pitchers
