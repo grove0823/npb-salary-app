@@ -8,6 +8,21 @@ import numpy as np
 batters = pd.read_csv("batters_with_salary.csv", encoding="utf-8")
 pitchers = pd.read_csv("pitchers_with_salary.csv", encoding="utf-8")
 
+# 2024年のデータのみにフィルタリング
+if '年度' in batters.columns:
+    batters = batters[batters['年度'] == 2024]
+elif 'year' in batters.columns:
+    batters = batters[batters['year'] == 2024]
+elif '年' in batters.columns:
+    batters = batters[batters['年'] == 2024]
+
+if '年度' in pitchers.columns:
+    pitchers = pitchers[pitchers['年度'] == 2024]
+elif 'year' in pitchers.columns:
+    pitchers = pitchers[pitchers['year'] == 2024]
+elif '年' in pitchers.columns:
+    pitchers = pitchers[pitchers['年'] == 2024]
+
 # 回帰分析による理論年俸計算関数
 def calculate_theoretical_salary(df, is_batter=True):
     """セイバーメトリクスを含む成績データから理論年俸を計算"""
@@ -148,27 +163,34 @@ def calculate_theoretical_salary(df, is_batter=True):
         return None
 
 # 理論年俸を計算
-st.sidebar.info("📊 理論年俸を計算中...")
+st.sidebar.info("📊 2024年成績から理論年俸を計算中...")
 
 batter_result = calculate_theoretical_salary(batters, is_batter=True)
 pitcher_result = calculate_theoretical_salary(pitchers, is_batter=False)
 
 if batter_result:
     batters_with_theoretical = batter_result[0]
-    st.sidebar.success("✅ 野手の理論年俸計算完了")
+    st.sidebar.success(f"✅ 野手の理論年俸計算完了 ({len(batters_with_theoretical)}名)")
 else:
     batters_with_theoretical = batters
     st.sidebar.warning("⚠️ 野手の理論年俸計算に失敗")
 
 if pitcher_result:
     pitchers_with_theoretical = pitcher_result[0]
-    st.sidebar.success("✅ 投手の理論年俸計算完了")
+    st.sidebar.success(f"✅ 投手の理論年俸計算完了 ({len(pitchers_with_theoretical)}名)")
 else:
     pitchers_with_theoretical = pitchers
     st.sidebar.warning("⚠️ 投手の理論年俸計算に失敗")
 
 # メインアプリ
-st.title("⚾ NPB選手年俸検索アプリ")
+st.title("⚾ NPB選手年俸検索アプリ (2024年シーズン)")
+
+# データ件数表示
+col1, col2 = st.columns(2)
+with col1:
+    st.info(f"📊 野手データ: {len(batters_with_theoretical)}名")
+with col2:
+    st.info(f"🥎 投手データ: {len(pitchers_with_theoretical)}名")
 
 # ポジション選択
 player_type = st.selectbox("ポジションを選択", ["野手", "投手"])
